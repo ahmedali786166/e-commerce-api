@@ -1,0 +1,76 @@
+const Product = require('../models/Product');
+const cloudinary = require('../utils/cloudinary');
+const fs = require('fs');
+const Joi = require('joi');
+
+const productSchema = Joi.object({
+    title: Joi.string().required(),
+    description: Joi.string().required(),
+    price: Joi.number().required(),
+    category: Joi.string().required(),
+    stock: Joi.number().required()
+});
+
+exports.createProduct = async (req, res) => {
+    try {
+        const { error } = productSchema.validate(req.body);
+        if (error) return res.status(400).json({ message: error.details[0].message });
+
+        if (!req.file) return res.status(400).json({ message: "Image is required" });
+
+        // Upload to Cloudinary
+        const result = await cloudinary.uploader.upload(req.file.path, { folder: "ecommerce" });
+        
+        // Remove file from local uploads folder
+        fs.unlinkSync(req.file.path);
+
+        const newProduct = new Product({
+            ...req.body,
+            image: result.secure_url,
+            createdBy: req.user.id
+        });
+
+        await newProduct.save();
+        res.status(201).json({ message: "Product created", product: newProduct });
+
+    } catch (error) {
+        res.status(500).json({ message: "Server Error", error: error.message });
+    }
+};
+
+exports.getAllProducts = async (req, res) => {
+    try {
+        const products = await Product.find();
+        res.status(200).json(products);
+    } catch (error) {
+        res.status(500).json({ message: "Server Error" });
+    }
+};
+
+exports.getProductById = async (req, res) => {
+    try {
+        const product = await Product.findById(req.params.id);
+        if (!product) return res.status(404).json({ message: "Product not found" });
+        res.status(200).json(product);
+    } catch (error) {
+        res.status(500).json({ message: "Server Error" });
+    }
+};
+
+exports.updateProduct = async (req, res) => {
+    try {
+        const updatedProduct = await Product.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        res.status(200).json({ message: "Product updated", product: updatedProduct });
+    } catch (error) {
+        res.status(500).json({ message: "Server Error" });
+    }
+};
+
+exports.deleteProduct = async (req, res) => {
+    try {
+        await Product.findByIdAndDelete(req.params.id);
+        res.status(200).json({ message: "Product deleted successfully" });
+    } catch (error) {
+        res.status(500).json({ message: "Server Error" });
+    }
+};
